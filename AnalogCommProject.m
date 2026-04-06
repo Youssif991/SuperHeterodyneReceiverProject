@@ -211,3 +211,41 @@ demodulated1_down = demodulated1_down / max(abs(demodulated1_down));
 disp('Playing demodulated Station 1 (Quran Palestine) Without fitler');
 pause(2);
 sound(demodulated1_down, original_Fs);
+%Plot
+N_plot = length(FDM);
+freq_plot = (-N_plot/2 : N_plot/2 - 1) * (Fs1 / N_plot);
+
+% Spectra
+Y_RF = fftshift(fft(RF_output1));
+Y_IF = fftshift(fft(IF_output1));
+Y_base = fftshift(fft(demodulated1));
+
+mag_RF = abs(Y_RF);
+mag_IF = abs(Y_IF);
+mag_base = abs(Y_base);
+% ===========Plot all three==================
+figure;
+
+subplot(3,1,1);
+plot(freq_plot / 1000, mag_RF);
+xlabel('Frequency (kHz)');
+ylabel('Magnitude');
+title('The Output without RF BPF');
+grid on;
+xlim([-200, 200]);
+
+subplot(3,1,2);
+plot(freq_plot / 1000, mag_IF);
+xlabel('Frequency (kHz)');
+ylabel('Magnitude');
+title('IF Stage Output (After BPF at 15 kHz)');
+grid on;
+xlim([-50, 50]);
+
+subplot(3,1,3);
+plot(freq_plot / 1000, mag_base);
+xlabel('Frequency (kHz)');
+ylabel('Magnitude');
+title('Baseband Output (After LPF)');
+grid on;
+xlim([-25, 25]);
