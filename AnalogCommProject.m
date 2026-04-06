@@ -72,14 +72,14 @@ N1 =length(signal1);
 Ts= 1/Fs1;
 t = (0:N1-1)' * Ts;
 % MODULATION
-fc1 = 100e3;
-fc2 = 130e3;
+fc = 100e3; % The frequency carrier
+delta_f = 30e3; % The frequency increasing factor for each carrier frequency
+fc1 = fc; % The frequency carrier for the first signal
+fc2 = fc+ delta_f; % For the n signal it would have fc + n delta_F
 modulated1 = signal1 .* cos(2 * pi * fc1 * t);
 modulated2 = signal2 .* cos(2 * pi * fc2 * t);
 FDM = modulated1 + modulated2;
-
-
-%==========PLOTTING============
+%% ==========PLOTTING============
 Y_FDM = fft(FDM);
 Y_FDM_shifted = fftshift(Y_FDM);
 magnitude_FDM = abs(Y_FDM_shifted);
