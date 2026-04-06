@@ -75,7 +75,7 @@ t = (0:N1-1)' * Ts;
 fc = 100e3; % The frequency carrier
 delta_f = 30e3; % The frequency increasing factor for each carrier frequency
 fc1 = fc; % The frequency carrier for the first signal
-fc2 = fc + delta_f; % For the n signal it would have fc + n delta_F
+fc2 = fc + delta_f; % For the n signal it would have fc + n delta_f
 modulated1 = signal1 .* cos(2 * pi * fc1 * t);
 modulated2 = signal2 .* cos(2 * pi * fc2 * t);
 FDM = modulated1 + modulated2;
@@ -98,7 +98,7 @@ xline(fc2/1000, 'g--', '130 kHz');
 xline(-fc1/1000, 'r--', '-100 kHz');
 xline(-fc2/1000, 'g--', '-130 kHz');
 legend('FDM', 'Station 1', 'Station 2');
-%  demodulation for signal1
+%%  demodulation for signal1
 RF_center1 = 100e3;   
 RF_bandwidth = 30e3;   
 RF_Fs = Fs1; 
@@ -114,7 +114,7 @@ RF_filter1 = designfilt('bandpassfir', ...
 RF_output1 = filter(RF_filter1, FDM);
 % mixer for fisrt station
 F_IF = 15e3;
-F_osc1 = 100e3 + F_IF;
+F_osc1 = fc + F_IF;
 mixer_output1 = RF_output1 .* cos(2 * pi * F_osc1 * t);
 %filtering
 IF_filter1 = designfilt('bandpassfir', ...
@@ -150,6 +150,8 @@ demodulated1_down = demodulated1_down / max(abs(demodulated1_down));
 disp('Playing demodulated Station 1 (Quran Palestine)...');
 pause(2);
 sound(demodulated1_down, original_Fs);
+audio_duration = length(demodulated1_down) / original_Fs;
+pause(audio_duration + 1);
 
 % ========== PLOT SPECTRA OF EACH STAGE (Q 2) ==========
 N_plot = length(FDM);
@@ -189,3 +191,23 @@ ylabel('Magnitude');
 title('Baseband Output (After LPF)');
 grid on;
 xlim([-25, 25]);
+%% Q4 - Removing the BPF filter
+
+% Taking the output directly without passing through a fitler
+RF_output1 = FDM;
+% Using the high side injection
+mixer_output1 = RF_output1 .* cos(2 * pi * F_osc1 * t);
+% Passin through the IF filter like we did when the RF filter existed
+IF_output1 = filter(IF_filter1, mixer_output1);
+% The BaseBand demodulation
+baseband_mixed1 = IF_output1 .* cos(2 * pi * F_IF * t);
+demodulated1 = filter(LPF_filter1, baseband_mixed1);
+demodulated1 = demodulated1 - mean(demodulated1);
+%Downsampling to the original signal
+original_Fs = Fs1 / upsample_factor;
+demodulated1_down = downsample(demodulated1, upsample_factor);
+demodulated1_down = demodulated1_down / max(abs(demodulated1_down));
+
+disp('Playing demodulated Station 1 (Quran Palestine) Without fitler');
+pause(2);
+sound(demodulated1_down, original_Fs);
