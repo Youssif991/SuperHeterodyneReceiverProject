@@ -251,8 +251,66 @@ ylabel('Magnitude');
 title('Baseband Output (After LPF)');
 grid on;
 xlim([-25, 25]);
-%% Q5 - Adding the mixer
+%% Q5 - Adding the mixer (1KHZ)
+RF_output1 = filter(RF_filter1, FDM);
 offset = 1e3; % Defining the offset
+f_osc_err = fc + F_IF + offset; % Adding the offset to the oscillator's frequency
+mixer_output1 = RF_output1 .* cos(2 * pi * f_osc_err * t);
+IF_output1 = filter(IF_filter1, mixer_output1);
+% The Demodulation
+baseband_mixed1 = IF_output1 .* cos(2 * pi * F_IF * t);
+demodulated1 = filter(LPF_filter1, baseband_mixed1);
+demodulated1 = demodulated1 - mean(demodulated1);
+%Downsampling to the original signal
+original_Fs = Fs1 / upsample_factor;
+demodulated1_down = downsample(demodulated1, upsample_factor);
+demodulated1_down = demodulated1_down / max(abs(demodulated1_down));
+disp('Playing demodulated Station 1 (Quran Palestine) With Offset');
+pause(2);
+sound(demodulated1_down, original_Fs);
+audio_duration = length(demodulated1_down) / original_Fs;
+pause(audio_duration + 1);
+%Plot
+N_plot = length(FDM);
+freq_plot = (-N_plot/2 : N_plot/2 - 1) * (Fs1 / N_plot);
+
+% Spectra
+Y_RF = fftshift(fft(RF_output1));
+Y_IF = fftshift(fft(IF_output1));
+Y_base = fftshift(fft(demodulated1));
+
+mag_RF = abs(Y_RF);
+mag_IF = abs(Y_IF);
+mag_base = abs(Y_base);
+% ===========Plot all three==================
+figure;
+
+subplot(3,1,1);
+plot(freq_plot / 1000, mag_RF);
+xlabel('Frequency (kHz)');
+ylabel('Magnitude');
+title('The Output without RF BPF');
+grid on;
+xlim([-200, 200]);
+
+subplot(3,1,2);
+plot(freq_plot / 1000, mag_IF);
+xlabel('Frequency (kHz)');
+ylabel('Magnitude');
+title('IF Stage Output (After BPF at 15 kHz)');
+grid on;
+xlim([-50, 50]);
+
+subplot(3,1,3);
+plot(freq_plot / 1000, mag_base);
+xlabel('Frequency (kHz)');
+ylabel('Magnitude');
+title('Baseband Output (After LPF)');
+grid on;
+xlim([-25, 25]);
+%% Q5 - Adding the mixer (0.1KHZ)
+RF_output1 = filter(RF_filter1, FDM);
+offset = 0.1e3; % Defining the offset
 f_osc_err = fc + F_IF + offset; % Adding the offset to the oscillator's frequency
 mixer_output1 = RF_output1 .* cos(2 * pi * f_osc_err * t);
 IF_output1 = filter(IF_filter1, mixer_output1);
