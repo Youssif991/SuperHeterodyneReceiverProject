@@ -1,254 +1,107 @@
+% main.m
 % Authors : Youssef Hisham Ahmed, Youssef Mohammed Ibrahim
 % Date : 4/4/2026
 % Subject : Modulation schemes for various signals
 
 clear; clc; close all;
 
-%% Reading the files
-[signal1_raw, Fs1] = audioread("C:\Users\bobyo\Downloads\Short_QuranPalestine.wav");
-[signal2_raw, Fs2] = audioread("C:\Users\bobyo\Downloads\Short_BBCArabic2.wav");
+%% 1. Run Preprocessing and Modulator
+preprocessing;
+modulator;
 
-%% Convert stereo to mono
-if size(signal1_raw, 2) == 2
-    signal1 = signal1_raw(:,1) + signal1_raw(:,2);
-else
-    signal1 = signal1_raw;
-end
-if size(signal2_raw, 2) == 2
-    signal2 = signal2_raw(:,1) + signal2_raw(:,2);
-else
-    signal2 = signal2_raw;
-end
-
-disp(['Fs1 = ', num2str(Fs1), ' Hz']);
-disp(['Fs2 = ', num2str(Fs2), ' Hz']);
-
-%% Pad to equal length
-len1 = length(signal1);
-len2 = length(signal2);
-max_len = max(len1, len2);
-
-if len1 < max_len
-    signal1 = [signal1; zeros(max_len - len1, 1)];
-end
-if len2 < max_len
-    signal2 = [signal2; zeros(max_len - len2, 1)];
-end
-
-%% ========== PLOT SPECTRUM (Original Baseband) ============
-N_plot1 = length(signal1);
-Y1_shifted = fftshift(fft(signal1));
-Y2_shifted = fftshift(fft(signal2));
-
-magnitude1_shifted = abs(Y1_shifted);
-magnitude2_shifted = abs(Y2_shifted);
-freq_shifted = (-N_plot1/2 : N_plot1/2 - 1) * (Fs1 / N_plot1);
-
-figure;
-subplot(2,1,1);
-plot(freq_shifted / 1000, magnitude1_shifted);
-xlabel('Frequency (kHz)'); ylabel('Magnitude'); title('Spectrum of Signal 1 (Quran Channel)'); grid on; xlim([-25, 25]);
-
-subplot(2,1,2);
-plot(freq_shifted / 1000, magnitude2_shifted);
-xlabel('Frequency (kHz)'); ylabel('Magnitude'); title('Spectrum of Signal 2 (BBC Channel)'); grid on; xlim([-25, 25]);
-
-%% Upsampling
-% As fc > Fs/2 we should upsample it
-upsample_factor = 10;
-signal1 = interp(signal1, upsample_factor);
-signal2 = interp(signal2, upsample_factor);
-
-Fs1 = Fs1 * upsample_factor;
-Fs2 = Fs2 * upsample_factor;
-disp(['New Fs1 = ', num2str(Fs1), ' Hz']);
-disp(['New Fs2 = ', num2str(Fs2), ' Hz']);
-
-%% MODULATION
-N1 = length(signal1);
-Ts = 1/Fs1;
-t = (0:N1-1)' * Ts;
-
-fc = 100e3; % Base carrier frequency
-delta_f = 30e3; % Frequency spacing
-fc1 = fc;             % Carrier for first signal (100 kHz)
-fc2 = fc + delta_f;   % Carrier for second signal (130 kHz)
-
-Quran_Channel_Modulated = signal1 .* cos(2 * pi * fc1 * t);
-BBC_Channel_Modulated = signal2 .* cos(2 * pi * fc2 * t);
-
-FDM = Quran_Channel_Modulated + BBC_Channel_Modulated;
-
-%% PLOTTING FDM
-Y_FDM = fft(FDM);
-Y_FDM_shifted = fftshift(Y_FDM);
-magnitude_FDM = abs(Y_FDM_shifted);
-freq_axis = (-N1/2 : N1/2 - 1) * (Fs1 / N1);
-
-figure;
-plot(freq_axis / 1000, magnitude_FDM);
-xlabel('Frequency (kHz)'); ylabel('Magnitude'); title('FDM Signal Spectrum'); grid on; xlim([-200, 200]);
-hold on;
-xline(fc1/1000, 'r--', '100 kHz');
-xline(fc2/1000, 'g--', '130 kHz');
-xline(-fc1/1000, 'r--', '-100 kHz');
-xline(-fc2/1000, 'g--', '-130 kHz');
-legend('FDM', 'Station 1 (Quran)', 'Station 2 (BBC)');
-
-%% DEMODULATION
-%RF Filtering Process
-RF_Filter_Order = 26;
-
-% Quran Channel RF Filter (100 kHz Center)
-RF_PassBand_Low_Quran = 85e3;
-RF_PassBand_High_Quran = 115e3;
-RF_Filter_Specs_Quran = fdesign.bandpass('N,F3dB1,F3dB2', RF_Filter_Order, RF_PassBand_Low_Quran, RF_PassBand_High_Quran, Fs1);
-RF_filter_Quran_Channel = design(RF_Filter_Specs_Quran, 'butter'); 
-RF_output_Quran_Channel = filter(RF_filter_Quran_Channel, FDM);
-
-% BBC Channel RF Filter (130 kHz Center)
-RF_PassBand_Low_BBC = 115e3;
-RF_PassBand_High_BBC = 145e3;
-RF_Filter_Specs_BBC = fdesign.bandpass('N,F3dB1,F3dB2', RF_Filter_Order, RF_PassBand_Low_BBC, RF_PassBand_High_BBC, Fs1);
-RF_filter_BBC_Channel = design(RF_Filter_Specs_BBC, 'butter'); 
-RF_output_BBC_Channel = filter(RF_filter_BBC_Channel, FDM);
-
-% Mixer Stage
+%% 2. Shared Filters Setup (IF & LPF)
 F_IF = 15e3;
-F_osc_Quran = fc1 + F_IF; % Local oscillator tuned for Quran (115 kHz)
-F_osc_BBC = fc2 + F_IF;   % Local oscillator tuned for BBC (145 kHz)
 
-Mixer_Output_Quran = RF_output_Quran_Channel .* cos(2 * pi * F_osc_Quran * t);
-Mixer_Output_BBC = RF_output_BBC_Channel .* cos(2 * pi * F_osc_BBC * t);
-
-% IF Filtering Process
+% IF Filtering Specs
 IF_Filter_Order = 8;
 IF_PassBand_Low = 5e3;
 IF_PassBand_High = 30e3;
 IF_Filter_Specs = fdesign.bandpass('N,F3dB1,F3dB2', IF_Filter_Order, IF_PassBand_Low, IF_PassBand_High, Fs1);
 IF_filter = design(IF_Filter_Specs, 'butter'); 
 
-IF_Quran_Channel = filter(IF_filter, Mixer_Output_Quran);
-IF_BBC_Channel = filter(IF_filter, Mixer_Output_BBC);
-
-% Return to Baseband & Low-Pass Filtering ---
+% LPF Specs
 LPF_Filter_Order = 8;
 LPF_Cutoff = 10e3; % 10 kHz cutoff
 LPF_Specs = fdesign.lowpass('N,F3dB', LPF_Filter_Order, LPF_Cutoff, Fs1);
 LPF_filter = design(LPF_Specs, 'butter');
 
-baseband_mixed_Quran = IF_Quran_Channel .* cos(2 * pi * F_IF * t);
-demodulated_Quran = filter(LPF_filter, baseband_mixed_Quran);
-demodulated_Quran = demodulated_Quran - mean(demodulated_Quran); % remove dc offset
+%% Channel Specific RF Filters & Oscillators
+RF_Filter_Order = 26;
 
-baseband_mixed_BBC = IF_BBC_Channel .* cos(2 * pi * F_IF * t);
-demodulated_BBC = filter(LPF_filter, baseband_mixed_BBC);
-demodulated_BBC = demodulated_BBC - mean(demodulated_BBC); % remove dc offset
+% Quran Channel RF Filter (100 kHz Center)
+RF_PassBand_Low_Quran = 85e3;
+RF_PassBand_High_Quran = 115e3;
+RF_Filter_Specs_Quran = fdesign.bandpass('N,F3dB1,F3dB2', RF_Filter_Order, RF_PassBand_Low_Quran, RF_PassBand_High_Quran, Fs1);
+RF_filter_Quran = design(RF_Filter_Specs_Quran, 'butter'); 
+RF_output_Quran = filter(RF_filter_Quran, FDM);
+F_osc_Quran = fc1 + F_IF;
 
+% BBC Channel RF Filter (130 kHz Center)
+RF_PassBand_Low_BBC = 115e3;
+RF_PassBand_High_BBC = 145e3;
+RF_Filter_Specs_BBC = fdesign.bandpass('N,F3dB1,F3dB2', RF_Filter_Order, RF_PassBand_Low_BBC, RF_PassBand_High_BBC, Fs1);
+RF_filter_BBC = design(RF_Filter_Specs_BBC, 'butter'); 
+RF_output_BBC = filter(RF_filter_BBC, FDM);
+F_osc_BBC = fc2 + F_IF;
 
-%% LISTEN & PLOT DEMODULATED SIGNALS
-original_Fs = Fs1 / upsample_factor;
+%% DEMODULATION
 
-% Downsample back & Normalize
-demod_Quran_down = downsample(demodulated_Quran, upsample_factor);
-demod_BBC_down = downsample(demodulated_BBC, upsample_factor);
-demod_Quran_down = demod_Quran_down / max(abs(demod_Quran_down));
-demod_BBC_down = demod_BBC_down / max(abs(demod_BBC_down));
+% Quran
+current_RF_in = RF_output_Quran;
+current_F_osc = F_osc_Quran;
+station_name = 'Quran Channel';
+current_condition = 'Ideal';
+receiver;
 
-sound(demod_Quran_down, original_Fs);
-pause((length(demod_Quran_down) / original_Fs) + 1);
+% BBC
+current_RF_in = RF_output_BBC;
+current_F_osc = F_osc_BBC;
+station_name = 'BBC Channel';
+current_condition = 'Ideal';
+receiver;
 
-sound(demod_BBC_down, original_Fs);
-pause((length(demod_BBC_down) / original_Fs) + 1);
+%% Q4 - NO RF Filter
 
-% Plot Ideal Spectra
-N_plot = length(FDM);
-freq_plot = (-N_plot/2 : N_plot/2 - 1) * (Fs1 / N_plot);
+% Quran Q4
+current_RF_in = FDM; % Using raw FDM instead of filtered RF
+current_F_osc = F_osc_Quran;
+station_name = 'Quran Channel';
+current_condition = 'Q4 (No BPF)';
+receiver;
 
-plot_demod_stages(RF_output_Quran_Channel, IF_Quran_Channel, demodulated_Quran, freq_plot, 'Quran Channel', 'Ideal');
-plot_demod_stages(RF_output_BBC_Channel, IF_BBC_Channel, demodulated_BBC, freq_plot, 'BBC Channel', 'Ideal');
-%% Q4 - Removing the RF BPF filter
-RF_output_NoBPF = FDM;
+% BBC Q4
+current_RF_in = FDM; % Using raw FDM instead of filtered RF
+current_F_osc = F_osc_BBC;
+station_name = 'BBC Channel';
+current_condition = 'Q4 (No BPF)';
+receiver;
+%% Q5 - MIXER OFFSET (1 kHz)
+% Quran Q5 (1kHz)
+current_RF_in = RF_output_Quran;
+current_F_osc = F_osc_Quran + 1e3;
+station_name = 'Quran Channel';
+current_condition = 'Q5 (1kHz Offset)';
+receiver;
 
-% Mixing & Filtering
-IF_NoBPF_Quran = filter(IF_filter, (RF_output_NoBPF .* cos(2 * pi * F_osc_Quran * t)));
-IF_NoBPF_BBC   = filter(IF_filter, (RF_output_NoBPF .* cos(2 * pi * F_osc_BBC * t)));
+% BBC Q5 (1kHz)
+current_RF_in = RF_output_BBC;
+current_F_osc = F_osc_BBC + 1e3;
+station_name = 'BBC Channel';
+current_condition = 'Q5 (1kHz Offset)';
+receiver;
+%% Q5 - MIXER OFFSET (0.1 kHz)
+% Quran Q5 (0.1kHz)
+current_RF_in = RF_output_Quran;
+current_F_osc = F_osc_Quran + 0.1e3;
+station_name = 'Quran Channel';
+current_condition = 'Q5 (0.1kHz Offset)';
+receiver;
 
-% Demodulation
-demod_NoBPF_Quran = filter(LPF_filter, (IF_NoBPF_Quran .* cos(2 * pi * F_IF * t)));
-demod_NoBPF_Quran = demod_NoBPF_Quran - mean(demod_NoBPF_Quran);
+% BBC Q5 (0.1kHz)
+current_RF_in = RF_output_BBC;
+current_F_osc = F_osc_BBC + 0.1e3;
+station_name = 'BBC Channel';
+current_condition = 'Q5 (0.1kHz Offset)';
+receiver;
 
-demod_NoBPF_BBC = filter(LPF_filter, (IF_NoBPF_BBC .* cos(2 * pi * F_IF * t)));
-demod_NoBPF_BBC = demod_NoBPF_BBC - mean(demod_NoBPF_BBC);
-
-% Downsample, Normalize & Play
-demod_NoBPF_Quran_down = downsample(demod_NoBPF_Quran, upsample_factor);
-demod_NoBPF_BBC_down = downsample(demod_NoBPF_BBC, upsample_factor);
-
-sound(demod_NoBPF_Quran_down / max(abs(demod_NoBPF_Quran_down)), original_Fs);
-pause((length(demod_NoBPF_Quran_down) / original_Fs) + 1);
-
-sound(demod_NoBPF_BBC_down / max(abs(demod_NoBPF_BBC_down)), original_Fs);
-pause((length(demod_NoBPF_BBC_down) / original_Fs) + 1);
-
-% Plotting Q4
-plot_demod_stages(RF_output_NoBPF, IF_NoBPF_Quran, demod_NoBPF_Quran, freq_plot, 'Quran Channel', 'Q4 (No BPF)');
-plot_demod_stages(RF_output_NoBPF, IF_NoBPF_BBC, demod_NoBPF_BBC, freq_plot, 'BBC Channel', 'Q4 (No BPF)');
-%% Q5 - Adding the mixer offset (1 kHz)
-offset_1k = 1e3; 
-F_osc_err_Quran_1k = fc1 + F_IF + offset_1k; 
-F_osc_err_BBC_1k   = fc2 + F_IF + offset_1k;
-
-% Mixing & Filtering (Using the IDEAL RF outputs)
-IF_err1k_Quran = filter(IF_filter, (RF_output_Quran_Channel .* cos(2 * pi * F_osc_err_Quran_1k * t)));
-IF_err1k_BBC   = filter(IF_filter, (RF_output_BBC_Channel .* cos(2 * pi * F_osc_err_BBC_1k * t)));
-
-% Demodulation
-demod_err1k_Quran = filter(LPF_filter, (IF_err1k_Quran .* cos(2 * pi * F_IF * t)));
-demod_err1k_Quran = demod_err1k_Quran - mean(demod_err1k_Quran);
-
-demod_err1k_BBC = filter(LPF_filter, (IF_err1k_BBC .* cos(2 * pi * F_IF * t)));
-demod_err1k_BBC = demod_err1k_BBC - mean(demod_err1k_BBC);
-
-% Downsample, Normalize & Play
-demod_err1k_Quran_down = downsample(demod_err1k_Quran, upsample_factor);
-demod_err1k_BBC_down = downsample(demod_err1k_BBC, upsample_factor);
-
-sound(demod_err1k_Quran_down / max(abs(demod_err1k_Quran_down)), original_Fs);
-pause((length(demod_err1k_Quran_down) / original_Fs) + 1);
-
-sound(demod_err1k_BBC_down / max(abs(demod_err1k_BBC_down)), original_Fs);
-pause((length(demod_err1k_BBC_down) / original_Fs) + 1);
-
-% Plotting Q5 (1kHz)
-plot_demod_stages(RF_output_Quran_Channel, IF_err1k_Quran, demod_err1k_Quran, freq_plot, 'Quran Channel', 'Q5 (1kHz Offset)');
-plot_demod_stages(RF_output_BBC_Channel, IF_err1k_BBC, demod_err1k_BBC, freq_plot, 'BBC Channel', 'Q5 (1kHz Offset)');
-%% Q5 - Adding the mixer offset (0.1 kHz)
-offset_100Hz = 0.1e3; 
-F_osc_err_Quran_100Hz = fc1 + F_IF + offset_100Hz; 
-F_osc_err_BBC_100Hz   = fc2 + F_IF + offset_100Hz;
-
-% Mixing & Filtering
-IF_err100_Quran = filter(IF_filter, (RF_output_Quran_Channel .* cos(2 * pi * F_osc_err_Quran_100Hz * t)));
-IF_err100_BBC   = filter(IF_filter, (RF_output_BBC_Channel .* cos(2 * pi * F_osc_err_BBC_100Hz * t)));
-
-% Demodulation
-demod_err100_Quran = filter(LPF_filter, (IF_err100_Quran .* cos(2 * pi * F_IF * t)));
-demod_err100_Quran = demod_err100_Quran - mean(demod_err100_Quran);
-
-demod_err100_BBC = filter(LPF_filter, (IF_err100_BBC .* cos(2 * pi * F_IF * t)));
-demod_err100_BBC = demod_err100_BBC - mean(demod_err100_BBC);
-
-% Downsample, Normalize & Play
-demod_err100_Quran_down = downsample(demod_err100_Quran, upsample_factor);
-demod_err100_BBC_down = downsample(demod_err100_BBC, upsample_factor);
-
-sound(demod_err100_Quran_down / max(abs(demod_err100_Quran_down)), original_Fs);
-pause((length(demod_err100_Quran_down) / original_Fs) + 1);
-
-sound(demod_err100_BBC_down / max(abs(demod_err100_BBC_down)), original_Fs);
-pause((length(demod_err100_BBC_down) / original_Fs) + 1);
-
-% Plotting Q5 (0.1kHz)
-plot_demod_stages(RF_output_Quran_Channel, IF_err100_Quran, demod_err100_Quran, freq_plot, 'Quran Channel', 'Q5 (0.1kHz Offset)');
-plot_demod_stages(RF_output_BBC_Channel, IF_err100_BBC, demod_err100_BBC, freq_plot, 'BBC Channel', 'Q5 (0.1kHz Offset)');
+disp('All processing complete!');
