@@ -5,11 +5,11 @@
 
 clear; clc; close all;
 
-%% 1. Run Preprocessing and Modulator
+%% Run Preprocessing and Modulator
 preprocessing;
 modulator;
 
-%% 2. Shared Filters Setup (IF & LPF)
+%% Shared Filters Setup (IF & LPF)
 F_IF = 15e3;
 
 % IF Filtering Specs
