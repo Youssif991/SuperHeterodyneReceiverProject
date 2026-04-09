@@ -96,7 +96,7 @@ xline(-fc2/1000, 'g--', '-130 kHz');
 legend('FDM', 'Station 1 (Quran)', 'Station 2 (BBC)');
 
 %% DEMODULATION
-%RF Filtering Process
+% --- 1. RF Filtering Process ---
 RF_Filter_Order = 26;
 
 % Quran Channel RF Filter (100 kHz Center)
@@ -113,7 +113,7 @@ RF_Filter_Specs_BBC = fdesign.bandpass('N,F3dB1,F3dB2', RF_Filter_Order, RF_Pass
 RF_filter_BBC_Channel = design(RF_Filter_Specs_BBC, 'butter'); 
 RF_output_BBC_Channel = filter(RF_filter_BBC_Channel, FDM);
 
-% Mixer Stage
+% --- 2. Mixer Stage ---
 F_IF = 15e3;
 F_osc_Quran = fc1 + F_IF; % Local oscillator tuned for Quran (115 kHz)
 F_osc_BBC = fc2 + F_IF;   % Local oscillator tuned for BBC (145 kHz)
@@ -121,7 +121,7 @@ F_osc_BBC = fc2 + F_IF;   % Local oscillator tuned for BBC (145 kHz)
 Mixer_Output_Quran = RF_output_Quran_Channel .* cos(2 * pi * F_osc_Quran * t);
 Mixer_Output_BBC = RF_output_BBC_Channel .* cos(2 * pi * F_osc_BBC * t);
 
-% IF Filtering Process
+% 3. IF Filtering Process (Shared Filter)
 IF_Filter_Order = 8;
 IF_PassBand_Low = 5e3;
 IF_PassBand_High = 30e3;
@@ -131,7 +131,7 @@ IF_filter = design(IF_Filter_Specs, 'butter');
 IF_Quran_Channel = filter(IF_filter, Mixer_Output_Quran);
 IF_BBC_Channel = filter(IF_filter, Mixer_Output_BBC);
 
-% Return to Baseband & Low-Pass Filtering ---
+% --- 4 & 5. Return to Baseband & Low-Pass Filtering ---
 LPF_Filter_Order = 8;
 LPF_Cutoff = 10e3; % 10 kHz cutoff
 LPF_Specs = fdesign.lowpass('N,F3dB', LPF_Filter_Order, LPF_Cutoff, Fs1);
@@ -146,7 +146,7 @@ demodulated_BBC = filter(LPF_filter, baseband_mixed_BBC);
 demodulated_BBC = demodulated_BBC - mean(demodulated_BBC); % remove dc offset
 
 
-%% LISTEN & PLOT DEMODULATED SIGNALS
+%% ========== LISTEN & PLOT IDEAL DEMODULATED SIGNALS ==========
 original_Fs = Fs1 / upsample_factor;
 
 % Downsample back & Normalize
