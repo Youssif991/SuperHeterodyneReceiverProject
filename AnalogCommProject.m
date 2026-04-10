@@ -1,191 +1,110 @@
+% main.m
 % Authors : Youssef Hisham Ahmed, Youssef Mohammed Ibrahim
 % Date : 4/4/2026
 % Subject : Modulation schemes for various signals
 
 clear; clc; close all;
-%%Readig the files
-[signal1_raw, Fs1]=audioread("C:\Users\bobyo\Downloads\Short_QuranPalestine.wav");
-[signal2_raw, Fs2]=audioread("C:\Users\bobyo\Downloads\Short_BBCArabic2.wav");
-%% convert stereo to mono
-if size(signal1_raw, 2) == 2
-    signal1 = signal1_raw(:,1) + signal1_raw(:,2);
-else
-    signal1 = signal1_raw;
-end
 
-if size(signal2_raw, 2) == 2
-    signal2 = signal2_raw(:,1) + signal2_raw(:,2);
-else
-    signal2 = signal2_raw;
-end
+%% Run Preprocessing and Modulator
+preprocessing;
+modulator;
 
-disp(['Fs1 = ', num2str(Fs1), ' Hz']);
-disp(['Fs2 = ', num2str(Fs2), ' Hz']);
-
-%% pad to equal length
-len1 = length(signal1);
-len2 = length(signal2);
-max_len = max(len1, len2);
-
-if len1 < max_len
-    signal1 = [signal1; zeros(max_len - len1, 1)];
-end
-if len2 < max_len
-    signal2 = [signal2; zeros(max_len - len2, 1)];
-end
-%% ========== PLOT SPECTRUM  ============
-N_plot1 = length(signal1);
-
-Y1_shifted = fftshift(fft(signal1));
-Y2_shifted = fftshift(fft(signal2));
-
-magnitude1_shifted = abs(Y1_shifted);
-magnitude2_shifted = abs(Y2_shifted);
-
-freq_shifted = (-N_plot1/2 : N_plot1/2 - 1) * (Fs1 / N_plot1);
-
-figure;
-plot(freq_shifted / 1000, magnitude1_shifted);
-xlabel('Frequency (kHz)');
-ylabel('Magnitude');
-title('Spectrum of Signal 1');
-grid on;
-xlim([-25, 25]);
-figure;
-plot(freq_shifted / 1000, magnitude2_shifted);
-xlabel('Frequency (kHz)');
-ylabel('Magnitude');
-title('Spectrum of Signal 2');
-grid on;
-xlim([-25, 25]);
-
-%% As fc> FS/2 we shold upsample it
-upsample_factor = 10;
-signal1 = interp(signal1, upsample_factor);
-signal2 = interp(signal2, upsample_factor);
-Fs1 = Fs1 * upsample_factor;
-Fs2 = Fs2 * upsample_factor;
-disp(['New Fs1 = ', num2str(Fs1), ' Hz']);
-disp(['New Fs2 = ', num2str(Fs2), ' Hz']);
-% Modulation
-N1 =length(signal1);
-Ts= 1/Fs1;
-t = (0:N1-1)' * Ts;
-% MODULATION
-fc1 = 100e3;
-fc2 = 130e3;
-modulated1 = signal1 .* cos(2 * pi * fc1 * t);
-modulated2 = signal2 .* cos(2 * pi * fc2 * t);
-FDM = modulated1 + modulated2;
-
-
-%==========PLOTTING============
-Y_FDM = fft(FDM);
-Y_FDM_shifted = fftshift(Y_FDM);
-magnitude_FDM = abs(Y_FDM_shifted);
-freq_axis = (-N1/2 : N1/2 - 1) * (Fs1 / N1);
-
-figure;
-plot(freq_axis / 1000, magnitude_FDM);
-xlabel('Frequency (kHz)');
-ylabel('Magnitude');
-title('FDM Signal Spectrum');
-grid on;
-xlim([-200, 200]);
-hold on;
-xline(fc1/1000, 'r--', '100 kHz');
-xline(fc2/1000, 'g--', '130 kHz');
-xline(-fc1/1000, 'r--', '-100 kHz');
-xline(-fc2/1000, 'g--', '-130 kHz');
-legend('FDM', 'Station 1', 'Station 2');
-%  demodulation for signal1
-RF_center1 = 100e3;   
-RF_bandwidth = 30e3;   
-RF_Fs = Fs1; 
-RF_filter1 = designfilt('bandpassfir', ...
-    'PassbandFrequency1', 85000, ...
-    'PassbandFrequency2', 115000, ...
-    'StopbandFrequency1', 70000, ...
-    'StopbandFrequency2', 130000, ...
-    'PassbandRipple', 1, ...
-    'StopbandAttenuation1', 60, ...    
-    'StopbandAttenuation2', 60, ...     
-    'SampleRate', Fs1);
-RF_output1 = filter(RF_filter1, FDM);
-% mixer for fisrt station
+%% Shared Filters Setup (IF & LPF)
 F_IF = 15e3;
-F_osc1 = 100e3 + F_IF;
-mixer_output1 = RF_output1 .* cos(2 * pi * F_osc1 * t);
-%filtering
-IF_filter1 = designfilt('bandpassfir', ...
-    'PassbandFrequency1', 5000, ...
-    'PassbandFrequency2', 30000, ...
-    'StopbandFrequency1', 1000, ...
-    'StopbandFrequency2', 40000, ...
-    'PassbandRipple', 1, ...
-    'StopbandAttenuation1', 60, ...     
-    'StopbandAttenuation2', 60, ...     
-    'SampleRate', Fs1);
-IF_output1 = filter(IF_filter1, mixer_output1);
-% return to baseband
-baseband_mixed1 = IF_output1 .* cos(2 * pi * F_IF * t);
-% Low-Pass Filter for Station 1
-LPF_filter1 = designfilt('lowpassfir', ...
-    'PassbandFrequency', 10000, ...
-    'StopbandFrequency', 15000, ...
-    'PassbandRipple', 1, ...
-    'StopbandAttenuation', 60, ...
-    'SampleRate', Fs1);
-demodulated1 = filter(LPF_filter1, baseband_mixed1);
-demodulated1 = demodulated1 - mean(demodulated1); % remove dc offset
-% ========== LISTEN TO DEMODULATED SIGNAL ==========
-% Downsample back
-original_Fs = Fs1 / upsample_factor;
-demodulated1_down = downsample(demodulated1, upsample_factor);
 
-% Normalize to prevent clipping
-demodulated1_down = demodulated1_down / max(abs(demodulated1_down));
+% IF Filtering Specs
+IF_Filter_Order = 8;
+IF_PassBand_Low = 5e3;
+IF_PassBand_High = 30e3;
+IF_Filter_Specs = fdesign.bandpass('N,F3dB1,F3dB2', IF_Filter_Order, IF_PassBand_Low, IF_PassBand_High, Fs1);
+IF_filter = design(IF_Filter_Specs, 'butter'); 
 
-% Play the sound
-disp('Playing demodulated Station 1 (Quran Palestine)...');
-pause(2);
-sound(demodulated1_down, original_Fs);
+% LPF Specs
+LPF_Filter_Order = 8;
+LPF_Cutoff = 10e3; % 10 kHz cutoff
+LPF_Specs = fdesign.lowpass('N,F3dB', LPF_Filter_Order, LPF_Cutoff, Fs1);
+LPF_filter = design(LPF_Specs, 'butter');
 
-% ========== PLOT SPECTRA OF EACH STAGE (Q 2) ==========
-N_plot = length(FDM);
-freq_plot = (-N_plot/2 : N_plot/2 - 1) * (Fs1 / N_plot);
+%% Channel Specific RF Filters & Oscillators
+RF_Filter_Order = 26;
 
-% Spectra
-Y_RF = fftshift(fft(RF_output1));
-Y_IF = fftshift(fft(IF_output1));
-Y_base = fftshift(fft(demodulated1));
+% Quran Channel RF Filter (100 kHz Center)
+RF_PassBand_Low_Quran = 85e3;
+RF_PassBand_High_Quran = 115e3;
+RF_Filter_Specs_Quran = fdesign.bandpass('N,F3dB1,F3dB2', RF_Filter_Order, RF_PassBand_Low_Quran, RF_PassBand_High_Quran, Fs1);
+RF_filter_Quran = design(RF_Filter_Specs_Quran, 'butter'); 
+RF_output_Quran = filter(RF_filter_Quran, FDM);
+F_osc_Quran = fc1 + F_IF;
 
-mag_RF = abs(Y_RF);
-mag_IF = abs(Y_IF);
-mag_base = abs(Y_base);
-% ===========Plot all three==================
-figure;
+% BBC Channel RF Filter (130 kHz Center)
+RF_PassBand_Low_BBC = 115e3;
+RF_PassBand_High_BBC = 145e3;
+RF_Filter_Specs_BBC = fdesign.bandpass('N,F3dB1,F3dB2', RF_Filter_Order, RF_PassBand_Low_BBC, RF_PassBand_High_BBC, Fs1);
+RF_filter_BBC = design(RF_Filter_Specs_BBC, 'butter'); 
+RF_output_BBC = filter(RF_filter_BBC, FDM);
+F_osc_BBC = fc2 + F_IF;
 
-subplot(3,1,1);
-plot(freq_plot / 1000, mag_RF);
-xlabel('Frequency (kHz)');
-ylabel('Magnitude');
-title('RF Stage Output (After BPF at 100 kHz)');
-grid on;
-xlim([-200, 200]);
+%% DEMODULATION
 
-subplot(3,1,2);
-plot(freq_plot / 1000, mag_IF);
-xlabel('Frequency (kHz)');
-ylabel('Magnitude');
-title('IF Stage Output (After BPF at 15 kHz)');
-grid on;
-xlim([-50, 50]);
+% Quran
+current_RF_in = RF_output_Quran;
+current_F_osc = F_osc_Quran;
+station_name = 'Quran Channel';
+current_condition = 'Ideal';
+receiver;
 
-subplot(3,1,3);
-plot(freq_plot / 1000, mag_base);
-xlabel('Frequency (kHz)');
-ylabel('Magnitude');
-title('Baseband Output (After LPF)');
-grid on;
-xlim([-25, 25]);
+% BBC
+current_RF_in = RF_output_BBC;
+current_F_osc = F_osc_BBC;
+station_name = 'BBC Channel';
+current_condition = 'Ideal';
+receiver;
+
+%% Q4 - NO RF Filter
+
+% Quran Q4
+current_RF_in = FDM; % Using raw FDM instead of filtered RF
+current_F_osc = F_osc_Quran;
+station_name = 'Quran Channel';
+current_condition = 'Q4 (No BPF)';
+receiver;
+
+% BBC Q4
+current_RF_in = FDM; % Using raw FDM instead of filtered RF
+current_F_osc = F_osc_BBC;
+station_name = 'BBC Channel';
+current_condition = 'Q4 (No BPF)';
+receiver;
+%% Q5 - MIXER OFFSET (1 kHz)
+% Quran Q5 (1kHz)
+current_RF_in = RF_output_Quran;
+current_F_osc = F_osc_Quran + 1e3;
+station_name = 'Quran Channel';
+current_condition = 'Q5 (1kHz Offset)';
+receiver;
+
+% BBC Q5 (1kHz)
+current_RF_in = RF_output_BBC;
+current_F_osc = F_osc_BBC + 1e3;
+station_name = 'BBC Channel';
+current_condition = 'Q5 (1kHz Offset)';
+receiver;
+%% Q5 - MIXER OFFSET (0.1 kHz)
+% Quran Q5 (0.1kHz)
+current_RF_in = RF_output_Quran;
+current_F_osc = F_osc_Quran + 0.1e3;
+station_name = 'Quran Channel';
+current_condition = 'Q5 (0.1kHz Offset)';
+receiver;
+
+% BBC Q5 (0.1kHz)
+current_RF_in = RF_output_BBC;
+current_F_osc = F_osc_BBC + 0.1e3;
+station_name = 'BBC Channel';
+current_condition = 'Q5 (0.1kHz Offset)';
+receiver;
+
+disp('All processing complete!');
+
+export_figures;
+
