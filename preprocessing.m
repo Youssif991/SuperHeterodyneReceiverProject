@@ -1,8 +1,8 @@
 % preprocessing.m
 
 %% Reading the files
-[signal1_raw, Fs1] = audioread("C:\Users\bobyo\Downloads\Short_QuranPalestine.wav");
-[signal2_raw, Fs2] = audioread("C:\Users\bobyo\Downloads\Short_BBCArabic2.wav");
+[signal1_raw, Fs1] = audioread("audios\Short_QuranPalestine.wav");
+[signal2_raw, Fs2] = audioread("audios\Short_BBCArabic2.wav");
 
 %% Convert stereo to mono
 if size(signal1_raw, 2) == 2, signal1 = signal1_raw(:,1) + signal1_raw(:,2); else, signal1 = signal1_raw; end
