@@ -1,7 +1,7 @@
 % main.m
 % Authors : Youssef Hisham Ahmed, Youssef Mohammed Ibrahim
 % Date : 4/4/2026
-% Subject : Modulation schemes for various signals
+% Subject : AM-Modulation and Super Heterodyne Receiver
 
 clear; clc; close all;
 
