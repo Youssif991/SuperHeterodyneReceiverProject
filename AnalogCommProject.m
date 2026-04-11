@@ -106,5 +106,3 @@ receiver;
 
 disp('All processing complete!');
 
-export_figures;
-
